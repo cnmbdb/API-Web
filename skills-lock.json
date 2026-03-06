@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "self-improving-agent": {
+      "source": "NeverSight/learn-skills.dev",
+      "sourceType": "github",
+      "computedHash": "5ca34cff4bfdb3ab8719e7838e428c5b22460ab900e36b3a6b6e5c0e299f2def"
+    },
+    "systematic-debugging": {
+      "source": "NeverSight/learn-skills.dev",
+      "sourceType": "github",
+      "computedHash": "d9a7267fc6797cfa605875d013d4ac65008302247fdae881fc344e0d3743bc5b"
+    }
+  }
+}
