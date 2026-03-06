@@ -1,8 +1,8 @@
 ## Skills
 
 ### Available skills
-- systematic-debugging: Follow a structured, hypothesis-driven debugging workflow for root-cause analysis and verification. (file: /Users/a2333/IDE/tgbot-Ultra-v1/.agents/skills/systematic-debugging/SKILL.md)
-- self-improving-agent: Continuously improve task execution quality using reflection, checkpoints, and correction loops. (file: /Users/a2333/IDE/tgbot-Ultra-v1/.agents/skills/self-improving-agent/SKILL.md)
+- systematic-debugging: Follow a structured, hypothesis-driven debugging workflow for root-cause analysis and verification. (file: /Users/a2333/IDE/API-web/.agents/skills/systematic-debugging/SKILL.md)
+- self-improving-agent: Continuously improve task execution quality using reflection, checkpoints, and correction loops. (file: /Users/a2333/IDE/API-web/.agents/skills/self-improving-agent/SKILL.md)
 
 ### Default trigger rules
 - On every conversation turn, trigger both `systematic-debugging` and `self-improving-agent` first.
