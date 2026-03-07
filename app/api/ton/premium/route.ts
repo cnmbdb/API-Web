@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { processTonPremium } from '@/lib/ton';
+import { processTonPremium, processTonPremiumGift } from '@/lib/ton';
 import { logApiCall } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -10,28 +10,49 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { username, mnemonic, hash_value, cookie, months } = body;
 
-    if (!username || !mnemonic || !hash_value || !cookie || !months) {
-      statusCode = 400;
-      responseData = { code: 400, msg: '缺少必要参数' };
-      const resp = NextResponse.json(responseData, { status: 400 });
-      setTimeout(() => {
-        logApiCall(request, responseData, statusCode, Date.now() - startTime);
-      }, 0);
-      return resp;
+    // 兼容两种模式：
+    // 1) 旧模式（月度开通）: username, mnemonic, hash_value, cookie, months
+    // 2) 融合 main.go 模式: amount, payload, duration, mnemonic?
+    const mode = body?.mode || 'legacy';
+
+    let result: any;
+    if (mode === 'gift' || (body?.amount && body?.payload && body?.duration)) {
+      const { amount, payload, duration, mnemonic } = body;
+      if (!amount || !payload || !duration) {
+        statusCode = 400;
+        responseData = { code: 400, msg: 'gift 模式缺少参数: amount/payload/duration' };
+        const resp = NextResponse.json(responseData, { status: 400 });
+        setTimeout(() => {
+          logApiCall(request, responseData, statusCode, Date.now() - startTime);
+        }, 0);
+        return resp;
+      }
+
+      result = await processTonPremiumGift({ amount, payload, duration, mnemonic });
+    } else {
+      const { username, mnemonic, hash_value, cookie, months } = body;
+      if (!username || !mnemonic || !hash_value || !cookie || !months) {
+        statusCode = 400;
+        responseData = { code: 400, msg: '缺少必要参数' };
+        const resp = NextResponse.json(responseData, { status: 400 });
+        setTimeout(() => {
+          logApiCall(request, responseData, statusCode, Date.now() - startTime);
+        }, 0);
+        return resp;
+      }
+
+      result = await processTonPremium({
+        username,
+        mnemonic,
+        hash_value,
+        cookie,
+        months,
+      });
     }
 
-    const result = await processTonPremium({
-      username,
-      mnemonic,
-      hash_value,
-      cookie,
-      months,
-    });
-
     responseData = result;
-    const resp = NextResponse.json(result);
+    const resp = NextResponse.json(result, { status: result?.code >= 400 ? result.code : 200 });
     setTimeout(() => {
       logApiCall(request, responseData, statusCode, Date.now() - startTime);
     }, 0);

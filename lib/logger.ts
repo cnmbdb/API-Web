@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { logApiRequest } from './db';
+import { isPublicIp, normalizeIp, pickBestPublicIpFromXff } from './ip';
 
 export async function logApiCall(
   request: NextRequest,
@@ -9,30 +10,23 @@ export async function logApiCall(
   errorMessage?: string
 ) {
   try {
-    const startTime = Date.now();
-    const sourceIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 
-                     request.headers.get('x-real-ip') || 
-                     'unknown';
+    const xff = request.headers.get('x-forwarded-for');
+    const sourceIp =
+      normalizeIp(xff?.split(',')[0]) ||
+      normalizeIp(request.headers.get('x-real-ip')) ||
+      'unknown';
     const sourceHost = request.headers.get('host') || null;
 
-    // 尝试从请求头或参数中获取机器人ID
-    const botId = request.headers.get('x-bot-id') || 
-                  request.nextUrl.searchParams.get('bot_id') || 
-                  null;
-
-    // Telegram 机器人管理员用户名（推荐由机器人在请求头中携带）
-    const adminUsername =
-      request.headers.get('x-bot-admin') ||
-      request.nextUrl.searchParams.get('admin_username') ||
+    // 先尝试从请求头/URL 读机器人标识
+    let botId = request.headers.get('x-bot-id') || request.nextUrl.searchParams.get('bot_id') || null;
+    let adminUsername = request.headers.get('x-bot-admin') || request.nextUrl.searchParams.get('admin_username') || null;
+    let botProcess = request.headers.get('x-bot-process') || request.nextUrl.searchParams.get('bot_process') || null;
+    let publicIp =
+      normalizeIp(request.headers.get('x-bot-public-ip')) ||
+      normalizeIp(request.nextUrl.searchParams.get('public_ip')) ||
       null;
 
-    // 机器人进程标识或名称（例如 job-worker-1、tg-bot-main）
-    const botProcess =
-      request.headers.get('x-bot-process') ||
-      request.nextUrl.searchParams.get('bot_process') ||
-      null;
-
-    // 读取请求数据（如果是 POST/PUT/PATCH）
+    // 读取请求数据（如果是 POST/PUT/PATCH），并从 body 补充机器人标识
     let requestData: any = null;
     try {
       if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
@@ -40,16 +34,55 @@ export async function logApiCall(
         const body = await clonedRequest.json().catch(() => null);
         if (body) {
           requestData = sanitizeRequestData(body);
+
+          // 兼容机器人后台只填 URL 的场景：从 body 自动识别关键字段
+          botId =
+            botId ||
+            body.bot_id ||
+            body.botId ||
+            body.tg_bot_id ||
+            body.username ||
+            null;
+
+          adminUsername =
+            adminUsername ||
+            body.admin_username ||
+            body.adminUsername ||
+            body.tg_admin_username ||
+            body.manager ||
+            null;
+
+          botProcess =
+            botProcess ||
+            body.process_name ||
+            body.processName ||
+            body.bot_process ||
+            body.worker ||
+            null;
+
+          publicIp =
+            publicIp ||
+            normalizeIp(body.public_ip) ||
+            normalizeIp(body.publicIp) ||
+            normalizeIp(body.server_ip) ||
+            normalizeIp(body.serverIp) ||
+            null;
         }
       }
-    } catch (e) {
+    } catch {
       // 忽略解析错误
     }
+
+    // 如果没有显式上报公网 IP，则尝试从 XFF 中挑一个“公网 IP”
+    const xffPublic = pickBestPublicIpFromXff(xff);
+    if (!publicIp && xffPublic) publicIp = xffPublic;
+    if (publicIp && !isPublicIp(publicIp)) publicIp = null;
 
     await logApiRequest({
       apiPath: request.nextUrl.pathname,
       method: request.method,
       sourceIp: sourceIp as string,
+      publicIp: publicIp || undefined,
       sourceHost: sourceHost || undefined,
       botId: botId || undefined,
       adminUsername: adminUsername || undefined,
@@ -62,11 +95,9 @@ export async function logApiCall(
     });
   } catch (error) {
     console.error('Failed to log API call:', error);
-    // 不抛出错误，避免影响主流程
   }
 }
 
-// 隐藏敏感信息
 function sanitizeRequestData(data: any): any {
   if (typeof data !== 'object' || data === null) {
     return data;
@@ -77,7 +108,7 @@ function sanitizeRequestData(data: any): any {
 
   for (const [key, value] of Object.entries(data)) {
     const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+    if (sensitiveKeys.some((sk) => lowerKey.includes(sk))) {
       sanitized[key] = '***HIDDEN***';
     } else if (typeof value === 'object' && value !== null) {
       sanitized[key] = sanitizeRequestData(value);
@@ -94,13 +125,12 @@ function sanitizeResponseData(data: any): any {
     return data;
   }
 
-  // 响应数据通常不包含敏感信息，但为了安全也做处理
   const sensitiveKeys = ['privatekey', 'private_key', 'secret'];
   const sanitized: any = Array.isArray(data) ? [] : {};
 
   for (const [key, value] of Object.entries(data)) {
     const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+    if (sensitiveKeys.some((sk) => lowerKey.includes(sk))) {
       sanitized[key] = '***HIDDEN***';
     } else if (typeof value === 'object' && value !== null) {
       sanitized[key] = sanitizeResponseData(value);

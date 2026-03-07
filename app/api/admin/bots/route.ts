@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBotConnections } from '@/lib/db';
+import { getBotConnectionsGrouped, deleteBotConnection } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
-    const botId = searchParams.get('botId') || undefined;
-    const sourceIp = searchParams.get('sourceIp') || undefined;
-    const status = searchParams.get('status') || undefined;
+    const runtimeStatus = (searchParams.get('runtimeStatus') as 'online' | 'offline' | null) || undefined;
 
-    const result = await getBotConnections({
+    // 新模式：按服务器 IP 分组
+    const result = await getBotConnectionsGrouped({
       page,
       pageSize,
-      botId,
-      sourceIp,
-      status,
+      runtimeStatus,
     });
 
     return NextResponse.json({
@@ -29,6 +26,32 @@ export async function GET(request: NextRequest) {
         code: 500,
         msg: error.message || '获取机器人连接失败',
       },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { code: 400, msg: '缺少 id 参数' },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await deleteBotConnection(parseInt(id));
+
+    return NextResponse.json({
+      code: deleted ? 200 : 404,
+      msg: deleted ? '删除成功' : '记录不存在',
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { code: 500, msg: error.message || '删除失败' },
       { status: 500 }
     );
   }

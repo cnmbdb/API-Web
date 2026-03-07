@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logApiCall } from '@/lib/logger';
 
-// /api/premium 路由，重定向到 /api/ton/premium 的处理逻辑
+// /api/premium 路由：兼容旧机器人配置，转发到 TON Premium 处理逻辑
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let responseData: any = null;
@@ -10,17 +10,43 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+
+    // gift 模式：amount + payload + duration
+    if (body?.mode === 'gift' || (body?.amount && body?.payload && body?.duration)) {
+      const { processTonPremiumGift } = await import('@/lib/ton');
+      const result = await processTonPremiumGift({
+        amount: body.amount,
+        payload: body.payload,
+        duration: body.duration,
+        mnemonic: body.mnemonic,
+      });
+
+      responseData = result;
+      statusCode = result?.code >= 400 ? result.code : 200;
+      const response = NextResponse.json(result, { status: statusCode });
+
+      setTimeout(() => {
+        logApiCall(request, responseData, statusCode, Date.now() - startTime, errorMessage);
+      }, 0);
+
+      return response;
+    }
+
+    // legacy 模式：username + mnemonic + hash_value + cookie + months
     const { username, mnemonic, hash_value, cookie, months } = body;
 
     if (!username || !mnemonic || !hash_value || !cookie || !months) {
       statusCode = 400;
       responseData = { code: 400, msg: '缺少必要参数' };
-      return NextResponse.json(responseData, { status: 400 });
+      const response = NextResponse.json(responseData, { status: 400 });
+      setTimeout(() => {
+        logApiCall(request, responseData, statusCode, Date.now() - startTime, errorMessage);
+      }, 0);
+      return response;
     }
 
-    // 直接导入并使用 ton/premium 的处理逻辑
     const { processTonPremium } = await import('@/lib/ton');
-    
+
     const result = await processTonPremium({
       username,
       mnemonic,
@@ -30,9 +56,9 @@ export async function POST(request: NextRequest) {
     });
 
     responseData = result;
-    const response = NextResponse.json(result);
-    
-    // 异步记录日志
+    statusCode = result?.code >= 400 ? result.code : 200;
+    const response = NextResponse.json(result, { status: statusCode });
+
     setTimeout(() => {
       logApiCall(request, responseData, statusCode, Date.now() - startTime, errorMessage);
     }, 0);
@@ -45,10 +71,9 @@ export async function POST(request: NextRequest) {
       code: 500,
       msg: errorMessage,
     };
-    
+
     const response = NextResponse.json(responseData, { status: 500 });
-    
-    // 异步记录日志
+
     setTimeout(() => {
       logApiCall(request, responseData, statusCode, Date.now() - startTime, errorMessage);
     }, 0);
