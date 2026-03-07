@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       const license = await createLicense({
         license_key,
         license_type: license_type || 'permanent',
-        max_bots: max_bots ? parseInt(max_bots) : null,
+        max_bots: max_bots ? parseInt(max_bots) : undefined,
         expires_at: expires_at || null,
       });
 

@@ -1,7 +1,7 @@
 'use strict';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSystemSettings, setSystemSetting, deleteSystemSetting } from '@/lib/db';
+import { getSystemSetting, getSystemSettings, setSystemSetting, deleteSystemSetting } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {

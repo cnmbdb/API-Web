@@ -149,7 +149,8 @@ export default function EnergyPage() {
                     <tr><td colSpan={6} style={{ ...td, textAlign: 'center' }}>暂无数据</td></tr>
                   ) : (
                     pools.map((pool) => {
-                      const usage = pool.capacity > 0 ? (parseFloat(pool.current_amount) / parseFloat(pool.capacity)) * 100 : 0;
+                      const capacity = parseFloat(pool.capacity);
+                      const usage = capacity > 0 ? (parseFloat(pool.current_amount) / capacity) * 100 : 0;
                       return (
                         <tr key={pool.id}>
                           <td style={td}>{pool.name} ({pool.name_en})</td>
