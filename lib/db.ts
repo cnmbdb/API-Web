@@ -722,6 +722,122 @@ export async function updateLicense(id: number, data: {
 }
 
 // =============================================
+// 机器人授权码（生成给机器人系统激活用）
+// =============================================
+
+export interface RobotAuthCodeRow {
+  id: number;
+  code: string;
+  max_bots: number | null;
+  max_domains: number;
+  bound_domains: string[];
+  expires_at: string | null;
+  status: string;
+  bound_site_url: string | null;
+  bound_robot_site: string | null;
+  bound_at: string | null;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listRobotAuthCodes(limit = 100): Promise<RobotAuthCodeRow[]> {
+  return query(
+    'SELECT * FROM robot_auth_codes ORDER BY id DESC LIMIT $1',
+    [limit]
+  );
+}
+
+export async function getRobotAuthCodeByCode(code: string) {
+  const rows = await query('SELECT * FROM robot_auth_codes WHERE code = $1', [code]);
+  return rows[0] as RobotAuthCodeRow | undefined;
+}
+
+export async function createRobotAuthCode(data: {
+  code: string;
+  max_bots?: number | null;
+  max_domains?: number;
+  expires_at?: string | null;
+  memo?: string | null;
+}) {
+  const rows = await query(
+    `INSERT INTO robot_auth_codes (code, max_bots, max_domains, expires_at, memo)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [
+      data.code,
+      data.max_bots ?? null,
+      data.max_domains ?? 4,
+      data.expires_at ?? null,
+      data.memo ?? null,
+    ]
+  );
+  return rows[0] as RobotAuthCodeRow;
+}
+
+export async function bindRobotAuthCode(code: string, siteUrl: string, robotSite?: string | null) {
+  const rows = await query(
+    `UPDATE robot_auth_codes
+     SET status = 'used', bound_site_url = $1, bound_robot_site = $2, bound_at = NOW(), updated_at = NOW()
+     WHERE code = $3 AND status = 'active' RETURNING *`,
+    [siteUrl, robotSite ?? null, code]
+  );
+  return rows[0] as RobotAuthCodeRow | undefined;
+}
+
+export async function revokeRobotAuthCode(id: number) {
+  const rows = await query(
+    `UPDATE robot_auth_codes SET status = 'revoked', updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return rows[0] as RobotAuthCodeRow | undefined;
+}
+
+export async function updateRobotAuthCode(id: number, data: {
+  max_bots?: number | null;
+  max_domains?: number;
+  expires_at?: string | null;
+  memo?: string | null;
+}) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.max_bots !== undefined) {
+    fields.push(`max_bots = $${paramIndex++}`);
+    values.push(data.max_bots);
+  }
+  if (data.max_domains !== undefined) {
+    fields.push(`max_domains = $${paramIndex++}`);
+    values.push(data.max_domains);
+  }
+  if (data.expires_at !== undefined) {
+    fields.push(`expires_at = $${paramIndex++}`);
+    values.push(data.expires_at);
+  }
+  if (data.memo !== undefined) {
+    fields.push(`memo = $${paramIndex++}`);
+    values.push(data.memo);
+  }
+
+  fields.push(`updated_at = NOW()`);
+  values.push(id);
+
+  const rows = await query(
+    `UPDATE robot_auth_codes SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return rows[0] as RobotAuthCodeRow | undefined;
+}
+
+export async function deleteRobotAuthCode(id: number) {
+  const result = await query(
+    'DELETE FROM robot_auth_codes WHERE id = $1 RETURNING id',
+    [id]
+  );
+  return result.length > 0;
+}
+
+// =============================================
 // 兑币相关函数
 // =============================================
 
